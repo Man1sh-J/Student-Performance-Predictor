@@ -1,49 +1,56 @@
 
-import streamlit as st
+from flask import Flask, request, jsonify, render_template
 import pandas as pd
 import joblib
+import os
 
-# Load our trained AI model
-model = joblib.load("student_model.pkl")
+app = Flask(__name__)
 
-# Website heading
-st.title("Student Performance Predictor")
-
-st.write("Predict student marks using Machine Learning")
-st.info("This is an educational AI/ML project.")
-
-# Get student information
-study_hours = st.slider(
-    "Study Hours Per Day", 1.0, 10.0, 5.0
+# Load the trained machine learning model
+model_path = os.path.join(
+    os.path.dirname(__file__),
+    "student_model.pkl"
 )
+model = joblib.load(model_path)
 
-attendance = st.slider(
-    "Attendance Percentage", 50, 100, 80
-)
+@app.route("/")
+def home():
+    return render_template("index.html")
 
-previous_marks = st.slider(
-    "Previous Exam Marks", 30, 95, 70
-)
+@app.route("/predict", methods=["POST"])
+def predict():
+    try:
+        data = request.get_json()
 
-# Predict marks
-if st.button("Predict Marks"):
+        study_hours = float(data["study_hours"])
+        attendance = float(data["attendance"])
+        previous_marks = float(data["previous_marks"])
 
-    student = pd.DataFrame({
-        "Study_Hours": [study_hours],
-        "Attendance": [attendance],
-        "Previous_Marks": [previous_marks]
-    })
+        # Validate the inputs
+        if not (1 <= study_hours <= 10):
+            return jsonify({"error": "Study hours must be between 1 and 10"}), 400
 
-    prediction = model.predict(student)[0]
+        if not (50 <= attendance <= 100):
+            return jsonify({"error": "Attendance must be between 50 and 100"}), 400
 
-    # Keep displayed marks between 0 and 100
-    prediction = max(0, min(100, prediction))
+        if not (30 <= previous_marks <= 95):
+            return jsonify({"error": "Previous marks must be between 30 and 95"}), 400
 
-    st.success(
-        f"Predicted Final Marks: {prediction:.2f}/100"
-    )
+        student = pd.DataFrame({
+            "Study_Hours": [study_hours],
+            "Attendance": [attendance],
+            "Previous_Marks": [previous_marks]
+        })
 
-    st.caption(
-        "Demo prediction based on synthetic training data. "
-        "Not validated for real student performance."
-    )
+        prediction = float(model.predict(student)[0])
+        prediction = max(0, min(100, prediction))
+
+        return jsonify({
+            "predicted_marks": round(prediction, 2)
+        })
+
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "Invalid student details"}), 400
+
+if __name__ == "__main__":
+    app.run(debug=True)
